@@ -158,8 +158,16 @@
         }
 
         function speakText(text, lang) {
+            if (!text || text.trim() === "") {
+                console.warn("Seslendirme için metin yok.");
+                return;
+            }
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = lang;
+            const voiceLang = lang.includes('-') ? lang : lang + '-' + lang.toUpperCase();
+            utterance.lang = voiceLang;
+            utterance.rate = 1;
+            utterance.pitch = 1;
+            speechSynthesis.cancel();
             speechSynthesis.speak(utterance);
         }
     </script>
