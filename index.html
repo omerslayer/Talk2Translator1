@@ -14,29 +14,33 @@
             margin: 0;
             display: flex;
             flex-direction: column;
-            justify-content: center;
+            justify-content: flex-start;
             align-items: center;
+            padding-top: 30px;
         }
-        h1 {
-            font-size: 2.5em;
-            margin-bottom: 20px;
+        h1 { font-size: 2.2em; margin-bottom: 10px; }
+        select, button {
+            padding: 10px;
+            margin: 10px;
+            border-radius: 8px;
+            border: none;
+            font-size: 1em;
         }
         button {
             background-color: #ff4081;
             color: white;
-            border: none;
-            padding: 15px 30px;
-            font-size: 1.2em;
-            border-radius: 30px;
             cursor: pointer;
             transition: 0.3s;
         }
-        button:hover {
-            background-color: #f50057;
-        }
-        #status {
-            margin-top: 20px;
-            font-size: 1.1em;
+        button:hover { background-color: #f50057; }
+        #status { margin-top: 15px; font-size: 1em; }
+        #recognizedText, #translatedText {
+            background: rgba(255,255,255,0.2);
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 8px;
+            width: 80%;
+            word-wrap: break-word;
         }
     </style>
 </head>
@@ -44,22 +48,48 @@
 
     <h1>🎤 Talk2Translate</h1>
     <p>Dilediğiniz dilde konuşun, anında çevirin!</p>
-    
-    <button id="startBtn">Dinlemeyi Başlat</button>
+
+    <div>
+        <label>Kaynak Dil: </label>
+        <select id="sourceLang">
+            <option value="tr">Türkçe</option>
+            <option value="en">İngilizce</option>
+            <option value="es">İspanyolca</option>
+            <option value="de">Almanca</option>
+            <option value="fr">Fransızca</option>
+        </select>
+
+        <label>Hedef Dil: </label>
+        <select id="targetLang">
+            <option value="en">İngilizce</option>
+            <option value="tr">Türkçe</option>
+            <option value="es">İspanyolca</option>
+            <option value="de">Almanca</option>
+            <option value="fr">Fransızca</option>
+        </select>
+    </div>
+
+    <button id="startBtn">🎤 Dinlemeyi Başlat</button>
     <p id="status">Hazır</p>
+
+    <div id="recognizedText"></div>
+    <div id="translatedText"></div>
 
     <script>
         const startBtn = document.getElementById('startBtn');
         const statusText = document.getElementById('status');
+        const recognizedText = document.getElementById('recognizedText');
+        const translatedText = document.getElementById('translatedText');
+        const sourceLang = document.getElementById('sourceLang');
+        const targetLang = document.getElementById('targetLang');
+
+        let recognition;
 
         startBtn.addEventListener('click', function() {
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                 navigator.mediaDevices.getUserMedia({ audio: true })
-                    .then(function(stream) {
-                        statusText.textContent = "Mikrofon izni verildi. Artık konuşabilirsiniz.";
-                        statusText.style.color = "lightgreen";
-                        console.log("Mikrofon izni alındı.");
-                        // Burada çeviri veya ses işleme kodun başlayacak
+                    .then(function() {
+                        startRecognition();
                     })
                     .catch(function(err) {
                         statusText.textContent = "Mikrofon izni reddedildi!";
@@ -70,6 +100,68 @@
                 alert("Tarayıcınız mikrofon desteği sunmuyor.");
             }
         });
+
+        function startRecognition() {
+            const langCode = sourceLang.value;
+            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = langCode;
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.start();
+            statusText.textContent = "Dinleniyor...";
+            statusText.style.color = "yellow";
+
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                recognizedText.textContent = "Algılanan: " + transcript;
+                translateText(transcript, sourceLang.value, targetLang.value);
+            };
+
+            recognition.onerror = function(event) {
+                console.error("Hata:", event.error);
+                statusText.textContent = "Hata: " + event.error;
+                statusText.style.color = "red";
+            };
+
+            recognition.onend = function() {
+                statusText.textContent = "Dinleme bitti";
+                statusText.style.color = "white";
+            };
+        }
+
+        async function translateText(text, source, target) {
+            const url = "https://libretranslate.de/translate";
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        q: text,
+                        source: source,
+                        target: target,
+                        format: "text"
+                    }),
+                    headers: { "Content-Type": "application/json" }
+                });
+
+                const data = await response.json();
+                if (data && data.translatedText) {
+                    translatedText.textContent = "Çeviri (" + target + "): " + data.translatedText;
+                    speakText(data.translatedText, target);
+                } else {
+                    translatedText.textContent = "Çeviri yapılamadı.";
+                }
+            } catch (error) {
+                console.error("Çeviri hatası:", error);
+                translatedText.textContent = "Çeviri hatası!";
+            }
+        }
+
+        function speakText(text, lang) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = lang;
+            speechSynthesis.speak(utterance);
+        }
     </script>
 
 </body>
