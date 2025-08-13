@@ -3,19 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ses Tanıma Testi</title>
+    <title>Talk2Translate</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            color: white;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { font-size: 2em; margin-bottom: 10px; }
+        select, button {
+            padding: 10px;
+            margin: 10px;
+            border-radius: 8px;
+            border: none;
+            font-size: 1em;
+        }
+        button {
+            background-color: #ff4081;
+            color: white;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover { background-color: #f50057; }
+        #status { margin-top: 15px; font-size: 1em; }
+        .box {
+            background: rgba(255,255,255,0.2);
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 8px;
+            width: 80%;
+            margin-left: auto;
+            margin-right: auto;
+            min-height: 40px;
+            word-wrap: break-word;
+        }
+    </style>
 </head>
 <body>
-    <h1>🎤 Ses Tanıma Testi</h1>
-    <button id="startBtn">Dinlemeyi Başlat</button>
+
+    <h1>🎤 Talk2Translate</h1>
+    <p>Dilediğiniz dilde konuşun, anında çevirin!</p>
+
+    <div>
+        <label>Kaynak Dil: </label>
+        <select id="sourceLang">
+            <option value="tr">Türkçe</option>
+            <option value="en">İngilizce</option>
+            <option value="es">İspanyolca</option>
+            <option value="de">Almanca</option>
+            <option value="fr">Fransızca</option>
+        </select>
+
+        <label>Hedef Dil: </label>
+        <select id="targetLang">
+            <option value="en">İngilizce</option>
+            <option value="tr">Türkçe</option>
+            <option value="es">İspanyolca</option>
+            <option value="de">Almanca</option>
+            <option value="fr">Fransızca</option>
+        </select>
+    </div>
+
+    <button id="startBtn">🎤 Dinlemeyi Başlat</button>
     <p id="status">Hazır</p>
-    <div id="recognizedText" style="border:1px solid black; padding:10px; width:80%; min-height:30px;"></div>
+
+    <div class="box" id="recognizedText">🎙 Algılanan metin burada görünecek</div>
+    <div class="box" id="translatedText">🌐 Çevrilen metin burada görünecek</div>
+    <button id="speakBtn" style="display:none;">🔊 Sesle Oku</button>
 
     <script>
         const startBtn = document.getElementById('startBtn');
         const statusText = document.getElementById('status');
         const recognizedText = document.getElementById('recognizedText');
+        const translatedText = document.getElementById('translatedText');
+        const speakBtn = document.getElementById('speakBtn');
+        const sourceLang = document.getElementById('sourceLang');
+        const targetLang = document.getElementById('targetLang');
+
         let recognition;
+        let lastTranslated = "";
 
         startBtn.addEventListener('click', function() {
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -25,6 +94,7 @@
                     })
                     .catch(function(err) {
                         statusText.textContent = "Mikrofon izni reddedildi!";
+                        statusText.style.color = "red";
                         console.error("Mikrofon izni reddedildi:", err);
                     });
             } else {
@@ -33,34 +103,82 @@
         });
 
         function startRecognition() {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                alert("Tarayıcınız SpeechRecognition desteği sunmuyor.");
-                return;
-            }
-            recognition = new SpeechRecognition();
-            recognition.lang = "tr-TR";
+            const langCode = sourceLang.value;
+            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = langCode;
             recognition.interimResults = false;
             recognition.maxAlternatives = 1;
 
             recognition.start();
             statusText.textContent = "Dinleniyor...";
+            statusText.style.color = "yellow";
 
             recognition.onresult = function(event) {
                 const transcript = event.results[0][0].transcript;
                 recognizedText.textContent = transcript;
-                console.log("Algılanan metin:", transcript);
+                translateText(transcript, sourceLang.value, targetLang.value);
             };
 
             recognition.onerror = function(event) {
                 console.error("Hata:", event.error);
                 statusText.textContent = "Hata: " + event.error;
+                statusText.style.color = "red";
             };
 
             recognition.onend = function() {
                 statusText.textContent = "Dinleme bitti";
+                statusText.style.color = "white";
             };
         }
+
+        async function translateText(text, source, target) {
+            const url = "https://libretranslate.de/translate";
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        q: text,
+                        source: source,
+                        target: target,
+                        format: "text"
+                    }),
+                    headers: { "Content-Type": "application/json" }
+                });
+
+                const data = await response.json();
+                if (data && data.translatedText) {
+                    translatedText.textContent = data.translatedText;
+                    lastTranslated = data.translatedText;
+                    speakBtn.style.display = "inline-block";
+                } else {
+                    translatedText.textContent = "Çeviri yapılamadı.";
+                    speakBtn.style.display = "none";
+                }
+            } catch (error) {
+                console.error("Çeviri hatası:", error);
+                translatedText.textContent = "Çeviri hatası!";
+                speakBtn.style.display = "none";
+            }
+        }
+
+        speakBtn.addEventListener('click', function() {
+            speakText(lastTranslated, targetLang.value);
+        });
+
+        function speakText(text, lang) {
+            if (!text || text.trim() === "") {
+                console.warn("Seslendirme için metin yok.");
+                return;
+            }
+            const utterance = new SpeechSynthesisUtterance(text);
+            const voiceLang = lang.includes('-') ? lang : lang + '-' + lang.toUpperCase();
+            utterance.lang = voiceLang;
+            utterance.rate = 1;
+            utterance.pitch = 1;
+            speechSynthesis.cancel();
+            speechSynthesis.speak(utterance);
+        }
     </script>
+
 </body>
 </html>
